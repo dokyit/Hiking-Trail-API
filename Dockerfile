@@ -27,4 +27,4 @@ COPY . .
 EXPOSE 5000
 
 # Run the app using gunicorn
-CMD ["sh", "-c", "gunicorn -w 4 -b 0.0.0.0:$PORT 'run:create_app()'"]
+CMD ["sh", "-c", "gunicorn -w 1 -b 0.0.0.0:$PORT 'run:create_app()'"]
