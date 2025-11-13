@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y \
     libproj-dev \
     gdal-bin \
     python3-gdal \
-    build-essential
+    build-essential \
+    libgeos-dev \
+    libgdal-dev
 
 # Set the working directory
 WORKDIR /usr/src/app
