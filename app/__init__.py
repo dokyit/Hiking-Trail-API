@@ -22,6 +22,30 @@ def create_app(config_class=Config):
     jwt.init_app(app)
     bcrypt.init_app(app)
 
+    # --- Add this code block to enable PostGIS ---
+    # This runs on app startup and ensures PostGIS is enabled
+    # "IF NOT EXISTS" makes it safe to run every time.
+    with app.app_context():
+        from sqlalchemy import create_engine, text
+        import os
+        try:
+            # We get the URL from the app's config
+            # Use os.environ.get as a fallback if config isn't loaded yet
+            db_url = app.config.get('SQLALCHEMY_DATABASE_URI') or os.environ.get('DATABASE_URL')
+            if db_url:
+                engine = create_engine(db_url)
+                with engine.connect() as connection:
+                    connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+                    connection.commit()
+                print("PostGIS extension checked/enabled.")
+            else:
+                print("DATABASE_URL not found, skipping PostGIS check.")
+        except Exception as e:
+            # We print the error, so it shows up in Render logs if it fails
+            print(f"Error enabling PostGIS: {e}")
+            pass
+    # --- End of new code block ---
+
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(trail_bp)
