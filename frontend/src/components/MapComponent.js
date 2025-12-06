@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
+import { Map, Marker, useMap } from "@vis.gl/react-google-maps";
 
 // Component to draw trail polyline on the map
 const TrailPolyline = ({ trail }) => {
@@ -91,6 +91,8 @@ const MapAnimator = ({ center }) => {
 };
 
 const MapComponent = ({ center, trails, selectedTrail }) => {
+  const mapId = process.env.REACT_APP_GOOGLE_MAP_ID;
+
   return (
     <div style={{ height: "100vh", width: "100%" }}>
       <Map
@@ -98,6 +100,7 @@ const MapComponent = ({ center, trails, selectedTrail }) => {
         center={center}
         defaultZoom={10}
         zoom={11}
+        mapId={mapId || undefined}
         gestureHandling={"greedy"}
         mapTypeId="terrain"
         options={{
@@ -129,31 +132,28 @@ const MapComponent = ({ center, trails, selectedTrail }) => {
           if (trail.difficulty === 3) markerColor = "#fd7e14"; // Hard - Orange
           if (trail.difficulty === 4) markerColor = "#dc3545"; // Extremely Hard - Red
 
+          const markerIcon =
+            window.google && window.google.maps
+              ? {
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: isSelected ? 10 : 7,
+                  fillColor: markerColor,
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: isSelected ? 3 : 2,
+                }
+              : undefined;
+
           return (
-            <AdvancedMarker
+            <Marker
               key={trail.id}
               position={{
                 lat: startLat,
                 lng: startLng,
               }}
               title={trail.name}
-            >
-              <div
-                style={{
-                  width: isSelected ? "32px" : "24px",
-                  height: isSelected ? "32px" : "24px",
-                  borderRadius: "50%",
-                  backgroundColor: markerColor,
-                  border: isSelected ? "4px solid white" : "3px solid white",
-                  boxShadow: isSelected
-                    ? "0 4px 12px rgba(0,0,0,0.5)"
-                    : "0 2px 4px rgba(0,0,0,0.3)",
-                  cursor: "pointer",
-                  transition: "all 0.3s ease",
-                  zIndex: isSelected ? 1000 : 1,
-                }}
-              />
-            </AdvancedMarker>
+              icon={markerIcon}
+            />
           );
         })}
       </Map>
