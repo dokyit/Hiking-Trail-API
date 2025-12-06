@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import API_URL from "../config";
 import TrailCard from "../components/TrailCard";
 import NavBar from "../components/NavBar";
 
@@ -9,7 +10,7 @@ const FavoritesPage = () => {
   useEffect(() => {
     const fetchFavorites = async () => {
       try {
-        const res = await axios.get("/api/favorites");
+        const res = await axios.get(`${API_URL}/api/favorites`);
         setFavorites(res.data.favorites);
       } catch (error) {
         console.error("Error fetching favorites:", error);

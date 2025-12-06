@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     binutils \
     libproj-dev \
     gdal-bin \
+    libgdal-dev \
     python3-gdal \
     build-essential
 
@@ -24,5 +25,5 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 5000
 
-# Run the app using gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "run:create_app()"]
+# Run the app using gunicorn with increased timeout for Redis Cloud connection
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--timeout", "120", "run:create_app()"]

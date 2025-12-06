@@ -1,4 +1,6 @@
-from app.extensions import db, bcrypt
+from datetime import datetime
+
+from app.extensions import bcrypt, db
 
 # Many-to-many join table for user favorites
 favorites = db.Table(
@@ -18,6 +20,12 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
 
+    # Login tracking fields
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_login = db.Column(db.DateTime)
+    last_ip = db.Column(db.String(45))  # IPv6 can be up to 45 characters
+    last_user_agent = db.Column(db.String(255))
+
     # Define the many-to-many relationship
     favorited_trails = db.relationship(
         "Trail",
@@ -31,3 +39,22 @@ class User(db.Model):
 
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password_hash, password)
+
+    def update_login_info(self, ip_address=None, user_agent=None):
+        """Update user's last login timestamp and related info."""
+        self.last_login = datetime.utcnow()
+        if ip_address:
+            self.last_ip = ip_address
+        if user_agent:
+            self.last_user_agent = user_agent
+        db.session.commit()
+
+    def serialize(self):
+        """Serialize user data (exclude sensitive info)."""
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login": self.last_login.isoformat() if self.last_login else None,
+        }

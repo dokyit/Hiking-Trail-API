@@ -4,8 +4,25 @@ from app.models.trail import Trail
 from app.extensions import db, cache
 from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_AsGeoJSON, ST_SetSRID
 from app.config import Config
+from app.utils.validators import sanitize_string, validate_city_name, validate_trail_id
+
+# Fallback coordinates for common Massachusetts cities
+# Used when Google Maps API is unavailable or invalid
+FALLBACK_COORDS = {
+    "boston": (42.3601, -71.0589),
+    "cambridge": (42.3736, -71.1097),
+    "worcester": (42.2626, -71.8023),
+    "springfield": (42.1015, -72.5898),
+    "salem": (42.5195, -70.8967),
+    "lowell": (42.6334, -71.3162),
+    "milton": (42.2496, -71.0662),
+    "medford": (42.4184, -71.1062),
+    "concord": (42.4604, -71.3489),
+    "quincy": (42.2529, -71.0023),
+}
 
 trail_bp = Blueprint("trail_bp", __name__, url_prefix="/api/trails")
+
 
 
 # --- Helper Functions ---
@@ -82,14 +99,27 @@ def get_difficulty_details(difficulty_rating):
 # @cache.cached(timeout=3600, query_string=True)  # Cache search results for 1 hour  # Commented out to avoid caching issues
 def search_trails():
     city = request.args.get("city")
-    if not city:
-        return jsonify(message="City parameter is required"), 400
+    
+    # Validate city name
+    is_valid, error = validate_city_name(city)
+    if not is_valid:
+        return jsonify(message=error), 400
+    
+    # Sanitize city name
+    city = sanitize_string(city, max_length=100)
 
     lat, lng = get_coordinates(city, Config.GOOGLE_MAPS_KEY)
+    
+    # Try fallback coordinates if geocoding fails
     if lat is None or lng is None:
-        # Temporary fix: Hardcode Boston coordinates if geocoding fails (due to invalid API key)
-        lat, lng = 42.3601, -71.0589  # Boston, MA
-        # return jsonify(message="Could not geocode city"), 404
+        city_lower = city.lower().strip()
+        if city_lower in FALLBACK_COORDS:
+            lat, lng = FALLBACK_COORDS[city_lower]
+            print(f"⚠️  Using fallback coordinates for {city} (Google Maps API unavailable)")
+        else:
+            return jsonify(
+                message=f"Could not find coordinates for '{city}'. Please check the spelling or try another Massachusetts city."
+            ), 404
 
     # Default radius is 25 miles (approx. 0.36 degrees for planar distance)
     radius_deg = 0.36
@@ -119,6 +149,11 @@ def search_trails():
 
 @trail_bp.route("/<int:trail_id>", methods=["GET"], strict_slashes=False)
 def get_trail_details(trail_id):
+    # Validate trail ID
+    is_valid, error = validate_trail_id(trail_id)
+    if not is_valid:
+        return jsonify(message=error), 400
+    
     trail = Trail.query.get(trail_id)
     if not trail:
         return jsonify(message="Trail not found"), 404

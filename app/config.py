@@ -43,7 +43,7 @@ class Config:
     else:
         CACHE_REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
-    CACHE_TYPE = "redis"
+    CACHE_TYPE = os.environ.get("CACHE_TYPE", "redis")
     CACHE_DEFAULT_TIMEOUT = 300  # Default cache timeout 5 minutes
 
     # External API Keys

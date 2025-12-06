@@ -1,30 +1,51 @@
 import React, { useState, useEffect } from "react";
 import TrailModal from "./TrailModal";
+import { addFavorite, removeFavorite } from '../services/favoritesService';
 
-const TrailCard = ({ trail }) => {
+const TrailCard = ({ trail, onTrailSelect, favoriteTrailIds = [], onFavoriteChange }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(favoriteTrailIds.includes(trail.id));
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Check if trail is favorited on mount
+  // Update favorite status when prop changes
   useEffect(() => {
-    const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
-    setIsFavorite(favorites.includes(trail.id));
-  }, [trail.id]);
+    setIsFavorite(favoriteTrailIds.includes(trail.id));
+  }, [favoriteTrailIds, trail.id]);
 
-  const toggleFavorite = (e) => {
+  const toggleFavorite = async (e) => {
     e.stopPropagation(); // Prevent card click
-    const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
 
-    if (isFavorite) {
-      // Remove from favorites
-      const newFavorites = favorites.filter((id) => id !== trail.id);
-      localStorage.setItem("favorites", JSON.stringify(newFavorites));
-      setIsFavorite(false);
-    } else {
-      // Add to favorites
-      favorites.push(trail.id);
-      localStorage.setItem("favorites", JSON.stringify(favorites));
-      setIsFavorite(true);
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      if (isFavorite) {
+        // Remove from favorites
+        await removeFavorite(trail.id);
+        setIsFavorite(false);
+        console.log('Removed from favorites');
+        if (onFavoriteChange) {
+          onFavoriteChange(); // Notify parent to refresh favorites list
+        }
+      } else {
+        // Add to favorites
+        await addFavorite(trail.id);
+        setIsFavorite(true);
+        console.log('Added to favorites');
+        if (onFavoriteChange) {
+          onFavoriteChange(); // Notify parent to refresh favorites list
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      // Show error message to user
+      if (error.response && error.response.status === 401) {
+        alert('Please log in to manage favorites.');
+      } else {
+        alert('Failed to update favorites. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -55,7 +76,12 @@ const TrailCard = ({ trail }) => {
           transition: "all 0.3s ease",
           position: "relative",
         }}
-        onClick={() => setIsModalOpen(true)}
+        onClick={() => {
+          setIsModalOpen(true);
+          if (onTrailSelect) {
+            onTrailSelect(trail);
+          }
+        }}
         onMouseEnter={(e) => {
           e.currentTarget.style.boxShadow = "0 6px 12px rgba(0,0,0,0.15)";
           e.currentTarget.style.transform = "translateY(-2px)";
@@ -179,7 +205,12 @@ const TrailCard = ({ trail }) => {
 
       <TrailModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          if (onTrailSelect) {
+            onTrailSelect(null); // Clear trail selection when modal closes
+          }
+        }}
         trailId={trail.id}
       />
     </>

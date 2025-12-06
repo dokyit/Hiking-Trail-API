@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import API_URL from "../config";
 
 const Weather = ({ city }) => {
   const [weather, setWeather] = useState(null);
@@ -9,7 +10,7 @@ const Weather = ({ city }) => {
     if (city) {
       setLoading(true);
       axios
-        .get(`/api/weather?city=${city}`)
+        .get(`${API_URL}/api/weather?city=${city}`)
         .then((response) => {
           setWeather(response.data);
           setLoading(false);

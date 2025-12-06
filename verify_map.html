@@ -1,0 +1,522 @@
+```html
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Massachusetts Trail Finder - Advanced</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            width: 380px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+        }
+
+        #sidebar-header {
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #sidebar-header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        #fav-dropdown {
+            position: relative;
+            cursor: pointer;
+        }
+
+        #fav-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            color: black;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            width: 200px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #fav-menu.show {
+            display: block;
+        }
+
+        .fav-item {
+            padding: 10px;
+            border-bottom: 1px solid #f1f3f5;
+            cursor: pointer;
+        }
+
+        .fav-item:hover {
+            background: #f8f9fa;
+        }
+
+        #search-container {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+            background: white;
+        }
+
+        #search-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            margin-bottom: 5px;
+        }
+
+        #town-suggestions {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            display: none;
+        }
+
+        .suggestion {
+            padding: 8px;
+            cursor: pointer;
+        }
+
+        .suggestion:hover {
+            background: #f1f3f5;
+        }
+
+        #trail-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+
+        /* Trail Card */
+        .trail-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-left: 5px solid #ccc;
+            /* Default border */
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .trail-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .trail-card.active {
+            background-color: #e7f5ff;
+        }
+
+        .card-diff-1 {
+            border-left-color: #28a745;
+        }
+
+        .card-diff-2 {
+            border-left-color: #ffc107;
+        }
+
+        .card-diff-3 {
+            border-left-color: #fd7e14;
+        }
+
+        .card-diff-4 {
+            border-left-color: #dc3545;
+        }
+
+        .trail-name {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 5px;
+            font-size: 1rem;
+            padding-right: 20px;
+        }
+
+        .trail-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .star-icon {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 1.2rem;
+            color: #dee2e6;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .star-icon:hover,
+        .star-icon.active {
+            color: #ffc107;
+        }
+
+        /* Map */
+        #map {
+            flex: 1;
+        }
+
+        /* Modal */
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #modal {
+            background: white;
+            width: 500px;
+            max-width: 90%;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        #modal h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            cursor: pointer;
+            font-size: 1.5rem;
+            color: #adb5bd;
+        }
+
+        .modal-section {
+            margin-bottom: 20px;
+        }
+
+        .modal-section h3 {
+            font-size: 1rem;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 5px;
+        }
+
+        .necessities-list {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .necessity-item {
+            background: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            font-size: 1.2rem;
+            color: #495057;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <h1>MA Trail Finder</h1>
+            <div id="fav-dropdown" onclick="toggleFavMenu()">
+                Favorites <span id="fav-count">(0)</span> ▼
+                <div id="fav-menu"></div>
+            </div>
+        </div>
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Enter City or Town (e.g. Concord)">
+            <div id="town-suggestions"></div>
+            <div style="font-size: 0.8rem; color: #6c757d; margin-top: 5px;">
+                Showing trails within 25 miles of search.
+            </div>
+        </div>
+        <div id="trail-list">
+            <!-- Cards will be injected here -->
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="loading">Loading trail data...</div>
+
+    <!-- Modal -->
+    <div id="modal-overlay" onclick="closeModal(event)">
+        <div id="modal">
+            <span class="modal-close" onclick="closeModal(event)">&times;</span>
+            <h2 id="modal-title">Trail Name</h2>
+            <div class="modal-section">
+                <p id="modal-desc">Description goes here.</p>
+            </div>
+            <div class="modal-section">
+                <h3>Trail Stats</h3>
+                <div style="display: flex; gap: 20px;">
+                    <div><strong>Length:</strong> <span id="modal-length">0</span> mi</div>
+                    <div><strong>Est. Time:</strong> <span id="modal-time">0</span> min</div>
+                    <div><strong>Difficulty:</strong> <span id="modal-diff">Easy</span></div>
+                </div>
+            </div>
+            <div class="modal-section">
+                <h3>Necessities</h3>
+                <ul class="necessities-list">
+                    <li class="necessity-item">💧 Water Bottle</li>
+                    <li class="necessity-item">🗺️ Map/GPS</li>
+                    <li class="necessity-item">🩹 First Aid Kit</li>
+                    <li class="necessity-item">👟 Hiking Boots</li>
+                    <li class="necessity-item">📱 Fully Charged Phone</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Map
+        var map = L.map('map').setView([42.4072, -71.3824], 9);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        var geojsonLayer;
+        var trailsData = [];
+        var activeLayer = null;
+        var currentSearchCircle = null;
+        var favorites = new Set();
+
+        // Town Data (Simplified for demo)
+        var towns = [
+            { "name": "Boston", "lat": 42.3601, "lon": -71.0589 },
+            { "name": "Worcester", "lat": 42.2626, "lon": -71.8023 },
+            { "name": "Springfield", "lat": 42.1015, "lon": -72.5898 },
+            { "name": "Concord", "lat": 42.4604, "lon": -71.3489 },
+            { "name": "Amherst", "lat": 42.3732, "lon": -72.5199 },
+            { "name": "Plymouth", "lat": 41.9584, "lon": -70.6673 },
+            { "name": "Salem", "lat": 42.5195, "lon": -70.8967 },
+            { "name": "Newburyport", "lat": 42.8126, "lon": -70.8773 },
+            { "name": "Lenox", "lat": 42.3612, "lon": -73.2837 },
+            { "name": "Falmouth", "lat": 41.5515, "lon": -70.6092 }
+        ];
+
+        // Helpers
+        function getColor(d) {
+            return d === 1 ? '#28a745' : d === 2 ? '#ffc107' : d === 3 ? '#fd7e14' : '#dc3545';
+        }
+        function getDiffLabel(d) {
+            return d === 1 ? 'Easy' : d === 2 ? 'Moderate' : d === 3 ? 'Hard' : 'Extreme';
+        }
+        function getDistance(lat1, lon1, lat2, lon2) {
+            var R = 3959; // Radius of the earth in miles
+            var dLat = deg2rad(lat2 - lat1);
+            var dLon = deg2rad(lon2 - lon1);
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            var d = R * c; // Distance in miles
+            return d;
+        }
+        function deg2rad(deg) { return deg * (Math.PI / 180); }
+
+        // Load Data
+        fetch('trails.geojson')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                trailsData = data.features;
+
+                renderList(trailsData.slice(0, 50)); // Initial load
+
+                geojsonLayer = L.geoJSON(data, {
+                    style: function (feature) {
+                        return {
+                            color: getColor(feature.properties.difficulty),
+                            weight: 3,
+                            opacity: 0.7
+                        };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        feature.layerId = L.Util.stamp(layer);
+                        layer.on('click', () => openModal(feature));
+                        layer.on('mouseover', () => highlightTrail(layer));
+                        layer.on('mouseout', () => resetHighlight(layer));
+                    }
+                }).addTo(map);
+            });
+
+        // Render List
+        function renderList(features) {
+            const list = document.getElementById('trail-list');
+            list.innerHTML = '';
+
+            if (features.length === 0) {
+                list.innerHTML = '<div style="padding:20px; text-align:center; color:#6c757d">No trails found in this area.</div>';
+                if (layer && layer !== activeLayer) resetHighlight(layer);
+            });
+
+            list.appendChild(card);
+        });
+        }
+
+        // Search Logic
+        const searchInput = document.getElementById('search-input');
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+
+            // Clear existing circle
+            if (currentSearchCircle) {
+                map.removeLayer(currentSearchCircle);
+                currentSearchCircle = null;
+            }
+
+            // Check if term matches a known town
+            const matchedTown = towns.find(t => t.name.toLowerCase() === term);
+
+            if (matchedTown) {
+                // Radius search
+                const filtered = trailsData.filter(f => {
+                    // Get trail centroid (approx)
+                    const coords = f.geometry.coordinates[0]; // [lon, lat]
+                    const dist = getDistance(matchedTown.lat, matchedTown.lon, coords[1], coords[0]);
+                    return dist <= 25;
+                });
+                renderList(filtered);
+
+                // Zoom map to town
+                map.setView([matchedTown.lat, matchedTown.lon], 11);
+
+                // Add circle
+                currentSearchCircle = L.circle([matchedTown.lat, matchedTown.lon], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.1,
+                    radius: 40233 // 25 miles in meters
+                }).addTo(map);
+
+            } else {
+                // Text search
+                const filtered = trailsData.filter(f =>
+                    f.properties.name.toLowerCase().includes(term) ||
+                    f.properties.town.toLowerCase().includes(term)
+                );
+                renderList(filtered.slice(0, 50));
+            }
+        }
+
+        function closeModal(e) {
+                if (e.target.id === 'modal-overlay' || e.target.classList.contains('modal-close')) {
+                    document.getElementById('modal-overlay').style.display = 'none';
+                }
+            }
+
+        // Map Interactions
+        function highlightTrail(layer) {
+                layer.setStyle({ weight: 6, opacity: 1, color: '#3388ff' });
+                layer.bringToFront();
+            }
+
+        function resetHighlight(layer) {
+                if (layer === activeLayer) return;
+                geojsonLayer.resetStyle(layer);
+            }
+
+        function zoomToTrail(feature) {
+                const layer = geojsonLayer.getLayer(feature.layerId);
+                activeLayer = layer;
+                highlightTrail(layer);
+                map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+            }
+
+        // Favorites
+        function toggleFav(e, name) {
+                e.stopPropagation();
+                if (favorites.has(name)) {
+                    favorites.delete(name);
+                    e.target.classList.remove('active');
+                } else {
+                    favorites.add(name);
+                    e.target.classList.add('active');
+                }
+                updateFavMenu();
+            }
+
+        function updateFavMenu() {
+                document.getElementById('fav-count').innerText = `(${favorites.size})`;
+                const menu = document.getElementById('fav-menu');
+                menu.innerHTML = '';
+                favorites.forEach(name => {
+                    const item = document.createElement('div');
+                    item.className = 'fav-item';
+                    item.innerText = name;
+                    menu.appendChild(item);
+                });
+                if (favorites.size === 0) {
+                    menu.innerHTML = '<div class="fav-item">No favorites yet</div>';
+                }
+            }
+
+        function toggleFavMenu() {
+                const menu = document.getElementById('fav-menu');
+                menu.classList.toggle('show');
+            }
+    </script>
+</body>
+
+</html>
+```

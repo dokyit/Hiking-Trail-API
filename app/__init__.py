@@ -1,8 +1,10 @@
 from flask import Flask
+from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
-from app.extensions import db, migrate, cache, jwt, bcrypt
+
+from app.api import auth_bp, fav_bp, trail_bp, weather_bp
 from app.config import Config
-from app.api import auth_bp, trail_bp, fav_bp, weather_bp
+from app.extensions import bcrypt, cache, db, jwt, migrate
 
 
 def create_app(config_class=Config):
@@ -11,6 +13,23 @@ def create_app(config_class=Config):
 
     # Add ProxyFix middleware to handle proxy headers correctly
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+    # Enable CORS for frontend
+    # For development - only allow localhost:3000
+    # For production, add your deployment domain to this list:
+    # ALLOWED_ORIGINS = ["https://your-app.com", "https://www.your-app.com"]
+    ALLOWED_ORIGINS = ["http://localhost:3000"]
+    
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": ALLOWED_ORIGINS,
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization"],
+            }
+        },
+    )
 
     # Disable strict slashes to prevent redirects
     app.url_map.strict_slashes = False

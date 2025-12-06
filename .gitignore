@@ -92,3 +92,10 @@ IMPLEMENTATION_SUMMARY.md
 CHECKLIST.md
 QUICKSTART.md
 AUTHENTICATION_REMOVED.md
+
+openspace/
+MAD_Trails/
+data_temp/
+*.dbf
+*.shp
+*.shx
