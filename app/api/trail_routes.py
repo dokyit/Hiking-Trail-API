@@ -100,6 +100,10 @@ def get_difficulty_details(difficulty_rating):
 def search_trails():
     city = request.args.get("city")
 
+    # Check if city parameter is provided
+    if not city:
+        return jsonify(message="City parameter is required"), 400
+
     # Validate city name
     is_valid, error = validate_city_name(city)
     if not is_valid:

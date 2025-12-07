@@ -1,5 +1,13 @@
 import React, { useMemo } from "react";
 
+const formatDuration = (minutes) => {
+  if (!minutes) return null;
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+};
+
 const DIFFICULTY_META = {
   1: { label: "Easy", color: "#28a745", background: "#d4edda", emoji: "🟢" },
   2: {
@@ -241,6 +249,19 @@ const TrailCard = ({
           >
             <span aria-hidden="true">⛰️</span>
             <strong>{trail.elevation_gain_ft} ft</strong>
+          </p>
+        ) : null}
+        {formatDuration(trail?.estimated_time_minutes) ? (
+          <p
+            style={{
+              margin: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span aria-hidden="true">⏱️</span>
+            <strong>{formatDuration(trail.estimated_time_minutes)}</strong>
           </p>
         ) : null}
       </div>

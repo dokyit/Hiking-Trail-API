@@ -140,6 +140,15 @@ const hasEssentialDetails = (trailData) => {
   return hasDescription && necessityList !== null;
 };
 
+// Helper to format minutes into "1h 30m" or "45m"
+const formatDuration = (minutes) => {
+  if (!minutes) return "N/A";
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+};
+
 const TrailModal = ({
   isOpen = false,
   onClose,
@@ -387,7 +396,7 @@ const TrailModal = ({
                   style={{ ...shimmerStyle, height: "20px", width: "85%" }}
                 />
                 <div style={metaGridStyle}>
-                  {[0, 1, 2].map((i) => (
+                  {[0, 1, 2, 3].map((i) => (
                     <div
                       key={`loading-${i}`}
                       style={{
@@ -433,6 +442,15 @@ const TrailModal = ({
                         ? `${resolvedTrail.length_miles} miles`
                         : "N/A",
                     },
+                    /* -- ADDED EST. TIME HERE -- */
+                    {
+                      label: "Est. Time",
+                      icon: "⏱️",
+                      value: formatDuration(
+                        resolvedTrail?.estimated_time_minutes,
+                      ),
+                    },
+                    /* -- ELEVATION IS NOW BELOW IT -- */
                     {
                       label: "Elevation",
                       icon: "⛰️",
