@@ -3,8 +3,13 @@ import axios from "axios";
 import API_URL from "../config";
 import MapComponent from "../components/MapComponent";
 import TrailCard from "../components/TrailCard";
+import TrailModal from "../components/TrailModal";
 import Weather from "../components/Weather";
-import { getFavorites } from '../services/favoritesService';
+import {
+  addFavorite,
+  getFavorites,
+  removeFavorite,
+} from "../services/favoritesService";
 
 const Dashboard = () => {
   const [city, setCity] = useState("Boston"); // Default city
@@ -18,6 +23,7 @@ const Dashboard = () => {
   const [favoriteTrails, setFavoriteTrails] = useState([]);
   const [favoriteTrailIds, setFavoriteTrailIds] = useState([]);
   const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [favoriteUpdatingId, setFavoriteUpdatingId] = useState(null);
 
   // Filter and sort states
   const [selectedDifficulties, setSelectedDifficulties] = useState([
@@ -25,8 +31,10 @@ const Dashboard = () => {
   ]); // All selected by default
   const [sortBy, setSortBy] = useState("name"); // name, difficulty, distance
 
-  // Selected trail for map highlighting
+  // Selected trail for map highlighting and details
   const [selectedTrail, setSelectedTrail] = useState(null);
+  const [isTrailModalOpen, setIsTrailModalOpen] = useState(false);
+  const [activeTrailForDetails, setActiveTrailForDetails] = useState(null);
 
   // Handle search submission
   const handleSearch = async (e) => {
@@ -44,6 +52,9 @@ const Dashboard = () => {
       setTrails(res.data.trails);
       setFilteredTrails(res.data.trails); // Initialize filtered trails
       setMapCenter(res.data.map_center); // Map animates to new center
+      setSelectedTrail(null);
+      setActiveTrailForDetails(null);
+      setIsTrailModalOpen(false);
       setLoading(false);
     } catch (error) {
       console.error("Error searching trails:", error);
@@ -59,11 +70,25 @@ const Dashboard = () => {
     setLoadingFavorites(true);
     try {
       const favorites = await getFavorites();
-      setFavoriteTrails(favorites);
-      setFavoriteTrailIds(favorites.map(trail => trail.id));
+      const normalizedFavorites = Array.isArray(favorites)
+        ? favorites.filter((trail) => trail && typeof trail.id !== "undefined")
+        : [];
+      const enrichedFavorites = normalizedFavorites.map((favorite) =>
+        enrichTrailWithGeometry(favorite),
+      );
+      setFavoriteTrails(enrichedFavorites);
+      setFavoriteTrailIds(enrichedFavorites.map((trail) => trail.id));
+      setActiveTrailForDetails((current) => {
+        if (!current) {
+          return current;
+        }
+        const refreshed = enrichedFavorites.find(
+          (fav) => fav.id === current.id,
+        );
+        return refreshed ? { ...current, ...refreshed } : current;
+      });
     } catch (error) {
       console.error("Error loading favorites:", error);
-      // If not authenticated, just set empty arrays
       setFavoriteTrails([]);
       setFavoriteTrailIds([]);
     } finally {
@@ -75,6 +100,200 @@ const Dashboard = () => {
   const openFavorites = () => {
     setShowFavoritesModal(true);
     loadFavorites();
+  };
+
+  const extractTrailMapCenter = (trail) => {
+    if (!trail) {
+      return null;
+    }
+
+    if (
+      typeof trail.latitude === "number" &&
+      typeof trail.longitude === "number"
+    ) {
+      return { lat: trail.latitude, lng: trail.longitude };
+    }
+
+    const geometrySource = trail.geometry || trail.geom || trail.geometry_json;
+
+    if (!geometrySource) {
+      return null;
+    }
+
+    try {
+      const geometryObject =
+        typeof geometrySource === "string"
+          ? JSON.parse(geometrySource)
+          : geometrySource;
+
+      const findFirstCoordinate = (node) => {
+        if (!node) {
+          return null;
+        }
+
+        if (
+          Array.isArray(node) &&
+          node.length === 2 &&
+          typeof node[0] === "number" &&
+          typeof node[1] === "number"
+        ) {
+          return { lat: node[1], lng: node[0] };
+        }
+
+        if (Array.isArray(node)) {
+          for (const child of node) {
+            const found = findFirstCoordinate(child);
+            if (found) {
+              return found;
+            }
+          }
+        }
+
+        if (node && typeof node === "object") {
+          if (node.coordinates) {
+            return findFirstCoordinate(node.coordinates);
+          }
+          if (node.geometry) {
+            return findFirstCoordinate(node.geometry);
+          }
+        }
+
+        return null;
+      };
+
+      let coordinatesRoot = geometryObject;
+
+      if (geometryObject?.type === "Feature") {
+        coordinatesRoot = geometryObject.geometry;
+      } else if (geometryObject?.type === "FeatureCollection") {
+        coordinatesRoot = geometryObject.features;
+      }
+
+      const firstCoordinate = findFirstCoordinate(
+        coordinatesRoot?.coordinates ?? coordinatesRoot,
+      );
+
+      if (firstCoordinate) {
+        return firstCoordinate;
+      }
+
+      if (
+        Array.isArray(geometryObject?.bbox) &&
+        geometryObject.bbox.length >= 4
+      ) {
+        const [minLng, minLat, maxLng, maxLat] = geometryObject.bbox;
+        if (
+          [minLng, minLat, maxLng, maxLat].every(
+            (value) => typeof value === "number",
+          )
+        ) {
+          return {
+            lat: (minLat + maxLat) / 2,
+            lng: (minLng + maxLng) / 2,
+          };
+        }
+      }
+    } catch (parseError) {
+      console.warn("Unable to parse trail geometry for map focus.", parseError);
+    }
+
+    return null;
+  };
+
+  const focusMapOnTrail = (trail) => {
+    const position = extractTrailMapCenter(trail);
+    if (position) {
+      setMapCenter(position);
+    }
+  };
+
+  const enrichTrailWithGeometry = (trail) => {
+    if (!trail) {
+      return null;
+    }
+
+    if (trail.geometry) {
+      return trail;
+    }
+
+    const sourceTrail =
+      trails.find((item) => item.id === trail.id && item.geometry) ||
+      favoriteTrails.find((item) => item.id === trail.id && item.geometry);
+
+    if (sourceTrail) {
+      return { ...sourceTrail, ...trail };
+    }
+
+    return trail;
+  };
+
+  const handleTrailSelect = (trail) => {
+    const enrichedTrail = enrichTrailWithGeometry(trail);
+    setSelectedTrail(enrichedTrail);
+    if (enrichedTrail) {
+      focusMapOnTrail(enrichedTrail);
+    }
+    return enrichedTrail;
+  };
+
+  const handleOpenTrailDetails = (trail) => {
+    if (!trail) {
+      return;
+    }
+    const enrichedTrail = handleTrailSelect(trail);
+    setActiveTrailForDetails(enrichedTrail);
+    setIsTrailModalOpen(true);
+  };
+
+  const handleCloseTrailDetails = () => {
+    setIsTrailModalOpen(false);
+    setActiveTrailForDetails(null);
+    setSelectedTrail(null);
+  };
+
+  const handleToggleFavorite = async (trail, shouldFavorite) => {
+    const normalizedTrail = enrichTrailWithGeometry(trail);
+    if (!normalizedTrail) {
+      return;
+    }
+    setFavoriteUpdatingId(normalizedTrail.id);
+    try {
+      if (shouldFavorite) {
+        const response = await addFavorite(normalizedTrail.id, normalizedTrail);
+        const createdTrail = response?.trail
+          ? { ...normalizedTrail, ...response.trail }
+          : normalizedTrail;
+        setFavoriteTrails((prev) => {
+          const filtered = prev.filter((fav) => fav.id !== createdTrail.id);
+          return [...filtered, createdTrail];
+        });
+        setFavoriteTrailIds((prev) =>
+          prev.includes(createdTrail.id) ? prev : [...prev, createdTrail.id],
+        );
+        setActiveTrailForDetails((current) =>
+          current && current.id === createdTrail.id
+            ? { ...current, ...createdTrail }
+            : current,
+        );
+      } else {
+        await removeFavorite(normalizedTrail.id);
+        setFavoriteTrails((prev) =>
+          prev.filter((fav) => fav.id !== normalizedTrail.id),
+        );
+        setFavoriteTrailIds((prev) =>
+          prev.filter((id) => id !== normalizedTrail.id),
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+      window.alert(
+        shouldFavorite
+          ? "Failed to add trail to favorites. Please try again."
+          : "Failed to remove trail from favorites. Please try again.",
+      );
+    } finally {
+      setFavoriteUpdatingId(null);
+    }
   };
 
   // Filter and sort trails whenever filters change
@@ -108,10 +327,7 @@ const Dashboard = () => {
 
   // Load favorites on component mount
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      loadFavorites();
-    }
+    loadFavorites();
   }, []);
 
   // Toggle difficulty filter
@@ -475,9 +691,12 @@ const Dashboard = () => {
                   <TrailCard
                     key={trail.id}
                     trail={trail}
-                    onTrailSelect={setSelectedTrail}
-                    favoriteTrailIds={favoriteTrailIds}
-                    onFavoriteChange={loadFavorites}
+                    isSelected={selectedTrail?.id === trail.id}
+                    isFavorite={favoriteTrailIds.includes(trail.id)}
+                    loadingFavorite={favoriteUpdatingId === trail.id}
+                    onSelect={handleTrailSelect}
+                    onOpenDetails={handleOpenTrailDetails}
+                    onToggleFavorite={handleToggleFavorite}
                   />
                 ))}
               </>
@@ -491,9 +710,28 @@ const Dashboard = () => {
             center={mapCenter}
             trails={filteredTrails}
             selectedTrail={selectedTrail}
+            onMarkerClick={handleOpenTrailDetails}
           />
         </div>
       </div>
+
+      <TrailModal
+        isOpen={isTrailModalOpen}
+        onClose={handleCloseTrailDetails}
+        trailId={activeTrailForDetails?.id}
+        trail={activeTrailForDetails}
+        isFavorite={
+          activeTrailForDetails
+            ? favoriteTrailIds.includes(activeTrailForDetails.id)
+            : false
+        }
+        favoriteLoading={
+          activeTrailForDetails
+            ? favoriteUpdatingId === activeTrailForDetails.id
+            : false
+        }
+        onFavoriteToggle={handleToggleFavorite}
+      />
 
       {/* Favorites Modal */}
       {showFavoritesModal && (
@@ -570,8 +808,12 @@ const Dashboard = () => {
                   <TrailCard
                     key={trail.id}
                     trail={trail}
-                    favoriteTrailIds={favoriteTrailIds}
-                    onFavoriteChange={loadFavorites}
+                    isSelected={selectedTrail?.id === trail.id}
+                    isFavorite={favoriteTrailIds.includes(trail.id)}
+                    loadingFavorite={favoriteUpdatingId === trail.id}
+                    onSelect={handleTrailSelect}
+                    onOpenDetails={handleOpenTrailDetails}
+                    onToggleFavorite={handleToggleFavorite}
                   />
                 ))}
               </div>

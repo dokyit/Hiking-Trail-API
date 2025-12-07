@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 import axios from "axios";
-
 import API_URL from "../config";
 
 const DIFFICULTY_META = {
@@ -30,37 +29,26 @@ const DIFFICULTY_META = {
   },
 };
 
+// Main container covers screen but lets clicks pass through
 const overlayStyle = {
   position: "fixed",
-  inset: "0",
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "flex-start",
-  pointerEvents: "none",
+  inset: 0,
+  pointerEvents: "none", // Allows clicking on the map behind
   zIndex: 1500,
 };
 
-const backdropStyle = {
+const panelBaseStyle = {
   position: "fixed",
-  inset: 0,
-  background: "linear-gradient(140deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0) 45%)",
-  zIndex: 1490,
-  pointerEvents: "auto",
-};
-
-const panelStyle = {
-  marginTop: "28px",
-  marginRight: "28px",
   width: "360px",
-  maxWidth: "calc(100% - 56px)",
-  maxHeight: "calc(100% - 56px)",
-  backgroundColor: "#fff",
+  backgroundColor: "#ffffff",
   borderRadius: "18px",
-  boxShadow: "0 18px 40px rgba(0,0,0,0.28)",
+  boxShadow: "0 22px 44px rgba(0,0,0,0.28)",
   display: "flex",
   flexDirection: "column",
-  pointerEvents: "auto",
   overflow: "hidden",
+  pointerEvents: "auto", // Re-enables clicking inside the modal
+  touchAction: "none",
+  maxHeight: "calc(100vh - 32px)", // Prevent it being taller than screen
 };
 
 const headerStyle = {
@@ -68,12 +56,14 @@ const headerStyle = {
   borderBottom: "1px solid rgba(0,0,0,0.08)",
   background: "linear-gradient(145deg, #ffffff 40%, #f4faf4 100%)",
   position: "relative",
+  cursor: "grab",
+  flexShrink: 0,
 };
 
 const closeButtonStyle = {
   position: "absolute",
-  top: "18px",
-  right: "18px",
+  top: "16px",
+  right: "16px",
   width: "34px",
   height: "34px",
   borderRadius: "50%",
@@ -137,6 +127,19 @@ const shimmerStyle = {
   borderRadius: "10px",
 };
 
+const marginBounds = 16;
+
+const hasEssentialDetails = (trailData) => {
+  if (!trailData || typeof trailData !== "object") return false;
+  const hasDescription =
+    typeof trailData.description === "string" &&
+    trailData.description.trim().length > 0;
+  const necessityList = Array.isArray(trailData.necessity_list)
+    ? trailData.necessity_list
+    : null;
+  return hasDescription && necessityList !== null;
+};
+
 const TrailModal = ({
   isOpen = false,
   onClose,
@@ -146,19 +149,38 @@ const TrailModal = ({
   favoriteLoading = false,
   onFavoriteToggle,
 }) => {
-  const [trailDetails, setTrailDetails] = useState(trail || null);
-  const [loading, setLoading] = useState(!trail && Boolean(trailId));
-  const [error, setError] = useState(null);
   const panelRef = useRef(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  const activeTrailId = trail?.id ?? trailId ?? trailDetails?.id ?? null;
+  const [trailDetails, setTrailDetails] = useState(trail || null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [position, setPosition] = useState({ x: -1000, y: marginBounds });
 
+  const activeTrailId =
+    (trail && trail.id) || trailId || (trailDetails && trailDetails.id) || null;
+
+  // --- Sync State ---
   useEffect(() => {
-    setTrailDetails(trail || null);
-  }, [trail]);
+    if (!trail) return;
+    setTrailDetails((prev) => {
+      if (!prev || prev.id !== trail.id) return trail;
+      return { ...prev, ...trail };
+    });
+  }, [trail, activeTrailId]);
 
+  // --- Fetch Data ---
   useEffect(() => {
-    if (!isOpen || !activeTrailId || (trail && trail.id === activeTrailId)) {
+    if (!isOpen || !activeTrailId) return;
+
+    const currentData =
+      (trail && trail.id === activeTrailId ? trail : null) ||
+      (trailDetails && trailDetails.id === activeTrailId ? trailDetails : null);
+
+    const isDataComplete = currentData && hasEssentialDetails(currentData);
+
+    if (isDataComplete) {
       setLoading(false);
       setError(null);
       return;
@@ -171,61 +193,99 @@ const TrailModal = ({
     axios
       .get(`${API_URL}/api/trails/${activeTrailId}`)
       .then((response) => {
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
         setTrailDetails(response.data.trail);
         setLoading(false);
       })
       .catch((err) => {
-        if (!isMounted) {
-          return;
-        }
-        const message =
-          err.response?.data?.message ||
-          err.message ||
-          "Unable to load trail details right now.";
-        setError(message);
+        if (!isMounted) return;
+        console.error("Failed to fetch trail details:", err);
+        setError("Unable to load additional details.");
         setLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, activeTrailId, trail]);
+  }, [isOpen, activeTrailId]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
+  // --- Positioning Logic (Right Side Snap) ---
+  useLayoutEffect(() => {
+    if (isOpen) {
+      const winWidth = window.innerWidth;
+      // Snap to right side: Window width - Panel width (360) - Margin (16)
+      const newX = winWidth - 360 - marginBounds;
+      const newY = marginBounds;
+
+      setPosition({
+        x: Math.max(marginBounds, newX),
+        y: newY,
+      });
     }
+  }, [isOpen]);
 
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && onClose) {
-        onClose();
+  // --- Dragging Logic ---
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (event) => {
+      const deltaX = event.clientX - dragOffsetRef.current.initialMouseX;
+      const deltaY = event.clientY - dragOffsetRef.current.initialMouseY;
+
+      let nextX = dragOffsetRef.current.initialPosX + deltaX;
+      let nextY = dragOffsetRef.current.initialPosY + deltaY;
+
+      // Basic bounds check
+      const panel = panelRef.current;
+      if (panel) {
+        const maxX = window.innerWidth - 50;
+        const maxY = window.innerHeight - 50;
+        nextX = Math.min(Math.max(nextX, -panel.offsetWidth + 50), maxX);
+        nextY = Math.min(Math.max(nextY, 0), maxY);
       }
+
+      setPosition({ x: nextX, y: nextY });
     };
+    const handleMouseUp = () => setIsDragging(false);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  const handleDragStart = (event) => {
+    if (!panelRef.current || event.button !== 0) return;
+    const target = event.target;
+    if (target.closest("button") || target.closest('[role="button"]')) return;
 
-  const difficultyMeta = useMemo(() => {
-    const level =
-      trailDetails?.difficulty ?? trail?.difficulty ?? DIFFICULTY_META[1];
-    return DIFFICULTY_META[level] || DIFFICULTY_META[1];
-  }, [trailDetails, trail]);
-
-  if (!isOpen || !activeTrailId) {
-    return null;
-  }
+    dragOffsetRef.current = {
+      initialMouseX: event.clientX,
+      initialMouseY: event.clientY,
+      initialPosX: position.x,
+      initialPosY: position.y,
+    };
+    setIsDragging(true);
+    event.preventDefault();
+  };
 
   const resolvedTrail = trailDetails || trail;
+  const level = resolvedTrail?.difficulty || 1;
+  const difficultyMeta = DIFFICULTY_META[level] || DIFFICULTY_META[1];
+
+  if (!isOpen || !activeTrailId) return null;
 
   const handleFavoriteClick = () => {
-    if (!onFavoriteToggle || !resolvedTrail) {
-      return;
+    if (onFavoriteToggle && resolvedTrail) {
+      onFavoriteToggle(resolvedTrail, !isFavorite);
     }
-    onFavoriteToggle(resolvedTrail, !isFavorite);
+  };
+
+  const panelStyle = {
+    ...panelBaseStyle,
+    top: position.y,
+    left: position.x,
+    cursor: isDragging ? "grabbing" : "default",
   };
 
   return (
@@ -237,8 +297,9 @@ const TrailModal = ({
           }
         `}
       </style>
-      <div style={overlayStyle} aria-live="polite">
-        <div style={backdropStyle} onClick={onClose} role="presentation" />
+
+      {/* No backdrop div here, just the container for positioning */}
+      <div style={overlayStyle}>
         <aside
           ref={panelRef}
           style={panelStyle}
@@ -246,22 +307,22 @@ const TrailModal = ({
           aria-label="Trail details"
           aria-modal="false"
         >
-          <div style={headerStyle}>
+          {/* Header is the Drag Handle */}
+          <div style={headerStyle} onMouseDown={handleDragStart}>
             {onClose && (
               <button
                 type="button"
                 style={closeButtonStyle}
                 onClick={onClose}
                 aria-label="Close trail details"
-                onMouseEnter={(event) => {
-                  event.currentTarget.style.backgroundColor =
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
                     "rgba(44, 95, 45, 0.18)";
-                  event.currentTarget.style.transform = "translateY(-1px)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
                 }}
-                onMouseLeave={(event) => {
-                  event.currentTarget.style.backgroundColor =
-                    "rgba(0, 0, 0, 0.06)";
-                  event.currentTarget.style.transform = "translateY(0)";
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.06)";
+                  e.currentTarget.style.transform = "translateY(0)";
                 }}
               >
                 ×
@@ -276,6 +337,7 @@ const TrailModal = ({
                   textTransform: "uppercase",
                   color: "rgba(60,70,60,0.7)",
                   fontWeight: 600,
+                  userSelect: "none",
                 }}
               >
                 Featured Trail
@@ -287,6 +349,7 @@ const TrailModal = ({
                   lineHeight: 1.3,
                   color: "#2c5f2d",
                   fontWeight: 700,
+                  userSelect: "none",
                 }}
               >
                 {resolvedTrail?.name || "Loading trail..."}
@@ -303,6 +366,7 @@ const TrailModal = ({
                 color: difficultyMeta.color,
                 fontWeight: 600,
                 fontSize: "14px",
+                userSelect: "none",
               }}
             >
               <span aria-hidden="true">{difficultyMeta.emoji}</span>
@@ -323,9 +387,9 @@ const TrailModal = ({
                   style={{ ...shimmerStyle, height: "20px", width: "85%" }}
                 />
                 <div style={metaGridStyle}>
-                  {[0, 1, 2].map((index) => (
+                  {[0, 1, 2].map((i) => (
                     <div
-                      key={`loading-tile-${index}`}
+                      key={`loading-${i}`}
                       style={{
                         ...shimmerStyle,
                         height: "72px",
@@ -360,21 +424,21 @@ const TrailModal = ({
                     {
                       label: "Location",
                       icon: "📍",
-                      value: resolvedTrail?.location ?? "Unknown",
+                      value: resolvedTrail?.location || "Unknown",
                     },
                     {
                       label: "Length",
                       icon: "🥾",
                       value: resolvedTrail?.length_miles
                         ? `${resolvedTrail.length_miles} miles`
-                        : "Not available",
+                        : "N/A",
                     },
                     {
-                      label: "Elevation Gain",
+                      label: "Elevation",
                       icon: "⛰️",
                       value: resolvedTrail?.elevation_gain_ft
                         ? `${resolvedTrail.elevation_gain_ft} ft`
-                        : "Not available",
+                        : "N/A",
                     },
                   ].map((tile) => (
                     <div key={tile.label} style={metaTileStyle}>
@@ -429,9 +493,9 @@ const TrailModal = ({
                   </section>
                 )}
 
-                {Array.isArray(resolvedTrail?.necessity_list) &&
+                {resolvedTrail?.necessity_list &&
                   resolvedTrail.necessity_list.length > 0 && (
-                    <section>
+                    <section style={{ marginBottom: "24px" }}>
                       <h3
                         style={{
                           margin: "0 0 12px",
@@ -482,7 +546,7 @@ const TrailModal = ({
                     onClick={handleFavoriteClick}
                     disabled={favoriteLoading}
                     style={{
-                      marginTop: "20px",
+                      marginTop: "8px",
                       width: "100%",
                       padding: "12px 16px",
                       borderRadius: "10px",
@@ -504,9 +568,7 @@ const TrailModal = ({
                         "transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease",
                     }}
                     onMouseEnter={(event) => {
-                      if (favoriteLoading) {
-                        return;
-                      }
+                      if (favoriteLoading) return;
                       event.currentTarget.style.transform = "translateY(-1px)";
                       event.currentTarget.style.boxShadow =
                         "0 10px 22px rgba(44,95,45,0.24)";
@@ -515,15 +577,10 @@ const TrailModal = ({
                       event.currentTarget.style.transform = "translateY(0)";
                       event.currentTarget.style.boxShadow = "none";
                     }}
-                    aria-label={
-                      isFavorite
-                        ? "Remove trail from favorites"
-                        : "Add trail to favorites"
-                    }
                   >
                     <span aria-hidden="true">{isFavorite ? "⭐" : "☆"}</span>
                     {favoriteLoading
-                      ? "Updating favorites..."
+                      ? "Updating..."
                       : isFavorite
                         ? "Remove from Favorites"
                         : "Add to Favorites"}

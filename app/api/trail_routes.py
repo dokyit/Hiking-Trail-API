@@ -1,9 +1,10 @@
 import requests
-from flask import Blueprint, request, jsonify
-from app.models.trail import Trail
-from app.extensions import db, cache
-from geoalchemy2.functions import ST_DWithin, ST_MakePoint, ST_AsGeoJSON, ST_SetSRID
+from flask import Blueprint, jsonify, request
+from geoalchemy2.functions import ST_AsGeoJSON, ST_DWithin, ST_MakePoint, ST_SetSRID
+
 from app.config import Config
+from app.extensions import cache, db
+from app.models.trail import Trail
 from app.utils.validators import sanitize_string, validate_city_name, validate_trail_id
 
 # Fallback coordinates for common Massachusetts cities
@@ -24,9 +25,8 @@ FALLBACK_COORDS = {
 trail_bp = Blueprint("trail_bp", __name__, url_prefix="/api/trails")
 
 
-
 # --- Helper Functions ---
-@cache.cached(timeout=2592000, key_prefix="geocode_")  # Cache for 30 days
+@cache.memoize(timeout=2592000)  # Cache for 30 days, keyed by arguments
 def get_coordinates(city_name, api_key):
     """Geocodes a city name using Google Maps API."""
     url = "https://maps.googleapis.com/maps/api/geocode/json"
@@ -99,23 +99,25 @@ def get_difficulty_details(difficulty_rating):
 # @cache.cached(timeout=3600, query_string=True)  # Cache search results for 1 hour  # Commented out to avoid caching issues
 def search_trails():
     city = request.args.get("city")
-    
+
     # Validate city name
     is_valid, error = validate_city_name(city)
     if not is_valid:
         return jsonify(message=error), 400
-    
+
     # Sanitize city name
     city = sanitize_string(city, max_length=100)
 
     lat, lng = get_coordinates(city, Config.GOOGLE_MAPS_KEY)
-    
+
     # Try fallback coordinates if geocoding fails
     if lat is None or lng is None:
         city_lower = city.lower().strip()
         if city_lower in FALLBACK_COORDS:
             lat, lng = FALLBACK_COORDS[city_lower]
-            print(f"⚠️  Using fallback coordinates for {city} (Google Maps API unavailable)")
+            print(
+                f"⚠️  Using fallback coordinates for {city} (Google Maps API unavailable)"
+            )
         else:
             return jsonify(
                 message=f"Could not find coordinates for '{city}'. Please check the spelling or try another Massachusetts city."
@@ -153,7 +155,7 @@ def get_trail_details(trail_id):
     is_valid, error = validate_trail_id(trail_id)
     if not is_valid:
         return jsonify(message=error), 400
-    
+
     trail = Trail.query.get(trail_id)
     if not trail:
         return jsonify(message="Trail not found"), 404
