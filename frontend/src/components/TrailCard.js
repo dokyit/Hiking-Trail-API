@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { MapPin, Clock, Ruler, Mountain, Star, Loader2 } from "lucide-react";
 
 const formatDuration = (minutes) => {
   if (!minutes) return null;
@@ -9,32 +10,23 @@ const formatDuration = (minutes) => {
 };
 
 const DIFFICULTY_META = {
-  1: { label: "Easy", color: "#28a745", background: "#d4edda", emoji: "🟢" },
-  2: {
-    label: "Moderate",
-    color: "#ffc107",
-    background: "#fff3cd",
-    emoji: "🟡",
-  },
-  3: { label: "Hard", color: "#fd7e14", background: "#ffe5d4", emoji: "🟠" },
-  4: {
-    label: "Extremely Hard",
-    color: "#dc3545",
-    background: "#f8d7da",
-    emoji: "🔴",
-  },
+  1: { label: "Easy", color: "#28a745", background: "#e8f5e9" }, // Removed emoji
+  2: { label: "Moderate", color: "#ffc107", background: "#fff8e1" },
+  3: { label: "Hard", color: "#fd7e14", background: "#fff3e0" },
+  4: { label: "Expert", color: "#dc3545", background: "#fce8e8" },
 };
 
 const baseCardStyle = {
-  border: "2px solid #e0e0e0",
-  borderRadius: "12px",
+  border: "1px solid #eaeaea",
+  borderRadius: "16px",
   margin: "12px 0",
-  padding: "16px",
+  padding: "20px",
   cursor: "pointer",
-  backgroundColor: "#fff",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-  transition: "all 0.3s ease",
+  backgroundColor: "#ffffff",
+  boxShadow: "0 4px 6px rgba(0,0,0,0.04)",
+  transition: "all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)",
   position: "relative",
+  overflow: "hidden",
 };
 
 const TrailCard = ({
@@ -63,60 +55,36 @@ const TrailCard = ({
     return {
       ...baseCardStyle,
       borderColor: difficulty.color,
-      boxShadow: "0 8px 18px rgba(44,95,45,0.25)",
-      transform: "translateY(-2px)",
+      boxShadow: `0 12px 24px -10px ${difficulty.color}40`, // Soft colored shadow
+      transform: "translateY(-4px)",
     };
   }, [difficulty.color, isSelected]);
 
   const handleCardClick = () => {
-    if (!trail) {
-      return;
-    }
-    if (onSelect) {
-      onSelect(trail);
-    }
-    if (!disableDetails && onOpenDetails) {
-      onOpenDetails(trail);
-    }
+    if (!trail) return;
+    if (onSelect) onSelect(trail);
+    if (!disableDetails && onOpenDetails) onOpenDetails(trail);
   };
 
   const handleFavoriteClick = (event) => {
     event.stopPropagation();
-    if (!trail || !onToggleFavorite || loadingFavorite) {
-      return;
-    }
+    if (!trail || !onToggleFavorite || loadingFavorite) return;
     onToggleFavorite(trail, !isFavorite);
   };
 
   const handleMouseEnter = (event) => {
-    if (onHover && trail) {
-      onHover(trail, true);
-    }
-    if (isSelected) {
-      return;
-    }
-    event.currentTarget.style.boxShadow = "0 6px 12px rgba(0,0,0,0.15)";
-    event.currentTarget.style.transform = "translateY(-2px)";
-    event.currentTarget.style.borderColor = difficulty.color;
+    if (onHover && trail) onHover(trail, true);
+    if (isSelected) return;
+    event.currentTarget.style.boxShadow = "0 10px 20px rgba(0,0,0,0.08)";
+    event.currentTarget.style.transform = "translateY(-4px)";
   };
 
   const handleMouseLeave = (event) => {
-    if (onHover && trail) {
-      onHover(trail, false);
-    }
-    if (isSelected) {
-      return;
-    }
-    event.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.08)";
+    if (onHover && trail) onHover(trail, false);
+    if (isSelected) return;
+    event.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.04)";
     event.currentTarget.style.transform = "translateY(0)";
-    event.currentTarget.style.borderColor = "#e0e0e0";
   };
-
-  const favoriteButtonLabel = isFavorite
-    ? "Remove from favorites"
-    : "Add to favorites";
-
-  const favoriteIcon = isFavorite ? "⭐" : "☆";
 
   return (
     <article
@@ -124,159 +92,137 @@ const TrailCard = ({
       tabIndex={0}
       style={cardStyle}
       onClick={handleCardClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleCardClick();
-        }
-      }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      aria-pressed={isSelected}
-      aria-label={`View details for ${trail?.name ?? "trail"}`}
     >
+      {/* Favorite Button */}
       <button
         type="button"
         onClick={handleFavoriteClick}
         disabled={loadingFavorite}
-        aria-pressed={isFavorite}
-        aria-label={favoriteButtonLabel}
         style={{
           position: "absolute",
-          top: "12px",
-          right: "12px",
+          top: "16px",
+          right: "16px",
           background: "none",
           border: "none",
           cursor: loadingFavorite ? "not-allowed" : "pointer",
-          fontSize: "24px",
           padding: "4px",
-          lineHeight: "1",
-          transition: "transform 0.2s",
-          color: isFavorite ? "#ffc107" : "#888888",
-        }}
-        onMouseEnter={(event) => {
-          if (!loadingFavorite) {
-            event.currentTarget.style.transform = "scale(1.2)";
-          }
-        }}
-        onMouseLeave={(event) => {
-          event.currentTarget.style.transform = "scale(1)";
+          color: isFavorite ? "#ffc107" : "#cbd5e0",
+          transition: "transform 0.2s, color 0.2s",
         }}
       >
-        {loadingFavorite ? "⏳" : favoriteIcon}
+        {loadingFavorite ? (
+          <Loader2 size={20} className="spin-anim" color="#888" />
+        ) : (
+          <Star
+            size={22}
+            fill={isFavorite ? "#ffc107" : "none"}
+            strokeWidth={isFavorite ? 0 : 2}
+          />
+        )}
       </button>
 
+      {/* Header */}
       <h3
         style={{
-          margin: "0 0 10px 0",
-          color: "#2c5f2d",
+          margin: "0 24px 8px 0", // Right margin avoids overlapping the star
+          color: "#1a202c",
           fontSize: "18px",
           fontWeight: "600",
+          lineHeight: "1.4",
         }}
       >
         {trail?.name ?? "Unnamed Trail"}
       </h3>
 
-      <p
-        style={{
-          margin: "6px 0",
-          color: "#555",
-          fontSize: "14px",
-          display: "flex",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ marginRight: "6px" }}>📍</span>
-        {trail?.location ?? "Location unavailable"}
-      </p>
-
+      {/* Location */}
       <div
         style={{
-          margin: "10px 0",
-          padding: "6px 12px",
-          backgroundColor: difficulty.background,
-          borderRadius: "6px",
-          display: "inline-flex",
+          display: "flex",
           alignItems: "center",
-          gap: "8px",
+          gap: "6px",
+          marginBottom: "12px",
         }}
       >
-        <span aria-hidden="true">{difficulty.emoji}</span>
-        <p
-          style={{
-            margin: 0,
-            fontWeight: "bold",
-            fontSize: "14px",
-            color: difficulty.color,
-          }}
-        >
-          Difficulty: {trail?.difficulty_text ?? difficulty.label}
-        </p>
+        <MapPin size={14} color="#718096" />
+        <span style={{ fontSize: "13px", color: "#718096", fontWeight: "500" }}>
+          {trail?.location ?? "Location unavailable"}
+        </span>
       </div>
 
+      {/* Difficulty Tag */}
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginTop: "12px",
-          fontSize: "13px",
-          color: "#666",
-          flexWrap: "wrap",
-          gap: "8px",
+          display: "inline-block",
+          padding: "4px 12px",
+          borderRadius: "99px",
+          backgroundColor: difficulty.background,
+          marginBottom: "16px",
         }}
       >
-        {trail?.length_miles ? (
-          <p
-            style={{
-              margin: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
+        <span
+          style={{
+            fontSize: "12px",
+            fontWeight: "600",
+            color: difficulty.color,
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+          }}
+        >
+          {trail?.difficulty_text ?? difficulty.label}
+        </span>
+      </div>
+
+      {/* Metrics Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "8px",
+          paddingTop: "16px",
+          borderTop: "1px solid #f7fafc",
+        }}
+      >
+        {/* Length */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Ruler size={16} color="#4a5568" />
+          <span
+            style={{ fontSize: "13px", color: "#4a5568", fontWeight: "500" }}
           >
-            <span aria-hidden="true">🥾</span>
-            <strong>{trail.length_miles} mi</strong>
-          </p>
-        ) : null}
-        {trail?.elevation_gain_ft ? (
-          <p
-            style={{
-              margin: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
+            {trail?.length_miles ? `${trail.length_miles} mi` : "--"}
+          </span>
+        </div>
+
+        {/* Elevation */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Mountain size={16} color="#4a5568" />
+          <span
+            style={{ fontSize: "13px", color: "#4a5568", fontWeight: "500" }}
           >
-            <span aria-hidden="true">⛰️</span>
-            <strong>{trail.elevation_gain_ft} ft</strong>
-          </p>
-        ) : null}
-        {formatDuration(trail?.estimated_time_minutes) ? (
-          <p
-            style={{
-              margin: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
+            {trail?.elevation_gain_ft ? `${trail.elevation_gain_ft} ft` : "--"}
+          </span>
+        </div>
+
+        {/* Time */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Clock size={16} color="#4a5568" />
+          <span
+            style={{ fontSize: "13px", color: "#4a5568", fontWeight: "500" }}
           >
-            <span aria-hidden="true">⏱️</span>
-            <strong>{formatDuration(trail.estimated_time_minutes)}</strong>
-          </p>
-        ) : null}
+            {formatDuration(trail?.estimated_time_minutes) || "--"}
+          </span>
+        </div>
       </div>
 
       {!disableDetails && (
-        <p
-          style={{
-            margin: "14px 0 0 0",
-            fontSize: "12px",
-            color: "#888",
-            fontStyle: "italic",
-          }}
-        >
-          Click to view details
-        </p>
+        <div style={{ marginTop: "12px", textAlign: "right" }}>
+          <span
+            style={{ fontSize: "12px", color: "#2c5f2d", fontWeight: "600" }}
+          >
+            View Details →
+          </span>
+        </div>
       )}
     </article>
   );

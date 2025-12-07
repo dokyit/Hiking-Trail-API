@@ -1,102 +1,78 @@
 import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 import axios from "axios";
 import API_URL from "../config";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  MapPin,
+  Ruler,
+  Mountain,
+  Clock,
+  Check,
+  Star,
+  Loader2,
+} from "lucide-react";
 
 const DIFFICULTY_META = {
-  1: {
-    label: "Easy",
-    color: "#28a745",
-    accent: "rgba(40, 167, 69, 0.14)",
-    emoji: "🟢",
-  },
-  2: {
-    label: "Moderate",
-    color: "#ffc107",
-    accent: "rgba(255, 193, 7, 0.18)",
-    emoji: "🟡",
-  },
-  3: {
-    label: "Hard",
-    color: "#fd7e14",
-    accent: "rgba(253, 126, 20, 0.18)",
-    emoji: "🟠",
-  },
-  4: {
-    label: "Extremely Hard",
-    color: "#dc3545",
-    accent: "rgba(220, 53, 69, 0.18)",
-    emoji: "🔴",
-  },
+  1: { label: "Easy", color: "#28a745", background: "#e8f5e9" },
+  2: { label: "Moderate", color: "#ffc107", background: "#fff8e1" },
+  3: { label: "Hard", color: "#fd7e14", background: "#fff3e0" },
+  4: { label: "Expert", color: "#dc3545", background: "#fce8e8" },
 };
 
-// Main container covers screen but lets clicks pass through
 const overlayStyle = {
   position: "fixed",
   inset: 0,
-  pointerEvents: "none", // Allows clicking on the map behind
+  pointerEvents: "none",
   zIndex: 1500,
 };
 
 const panelBaseStyle = {
   position: "fixed",
-  width: "360px",
+  width: "380px", // Slightly wider for better readability
   backgroundColor: "#ffffff",
-  borderRadius: "18px",
-  boxShadow: "0 22px 44px rgba(0,0,0,0.28)",
+  borderRadius: "20px",
+  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)", // Deep shadow
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
-  pointerEvents: "auto", // Re-enables clicking inside the modal
+  pointerEvents: "auto",
   touchAction: "none",
-  maxHeight: "calc(100vh - 32px)", // Prevent it being taller than screen
+  maxHeight: "calc(100vh - 40px)",
+  border: "1px solid rgba(0,0,0,0.05)",
 };
 
 const headerStyle = {
-  padding: "20px 24px 16px",
-  borderBottom: "1px solid rgba(0,0,0,0.08)",
-  background: "linear-gradient(145deg, #ffffff 40%, #f4faf4 100%)",
+  padding: "24px 24px 16px",
+  background: "#ffffff",
   position: "relative",
   cursor: "grab",
   flexShrink: 0,
-};
-
-const closeButtonStyle = {
-  position: "absolute",
-  top: "16px",
-  right: "16px",
-  width: "34px",
-  height: "34px",
-  borderRadius: "50%",
-  border: "none",
-  backgroundColor: "rgba(0,0,0,0.06)",
-  cursor: "pointer",
-  color: "#2d352d",
-  fontSize: "18px",
-  fontWeight: "700",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  transition: "background-color 0.2s ease, transform 0.2s ease",
+  borderBottom: "1px solid #f0f0f0",
 };
 
 const bodyStyle = {
-  padding: "22px 24px",
+  padding: "24px",
   overflowY: "auto",
   flex: 1,
+  backgroundColor: "#fcfcfc",
 };
 
 const metaGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: "14px",
-  marginBottom: "22px",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "12px",
+  marginBottom: "24px",
 };
 
 const metaTileStyle = {
-  backgroundColor: "#f6faf6",
+  backgroundColor: "#ffffff",
   borderRadius: "12px",
-  border: "1px solid rgba(44, 95, 45, 0.14)",
-  padding: "12px 14px",
+  border: "1px solid #e2e8f0",
+  padding: "16px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
 };
 
 const chipListStyle = {
@@ -105,29 +81,10 @@ const chipListStyle = {
   padding: 0,
   display: "flex",
   flexDirection: "column",
-  gap: "8px",
+  gap: "10px",
 };
 
-const chipStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-  padding: "10px 12px",
-  borderRadius: "9px",
-  border: "1px solid rgba(0,0,0,0.08)",
-  backgroundColor: "#ffffff",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-};
-
-const shimmerStyle = {
-  background:
-    "linear-gradient(90deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.02) 50%, rgba(0,0,0,0.08) 100%)",
-  backgroundSize: "220% 100%",
-  animation: "trail-modal-shimmer 1.8s infinite",
-  borderRadius: "10px",
-};
-
-const marginBounds = 16;
+const marginBounds = 20;
 
 const hasEssentialDetails = (trailData) => {
   if (!trailData || typeof trailData !== "object") return false;
@@ -140,7 +97,6 @@ const hasEssentialDetails = (trailData) => {
   return hasDescription && necessityList !== null;
 };
 
-// Helper to format minutes into "1h 30m" or "45m"
 const formatDuration = (minutes) => {
   if (!minutes) return "N/A";
   const hrs = Math.floor(minutes / 60);
@@ -165,7 +121,7 @@ const TrailModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: -1000, y: marginBounds });
+  const [position, setPosition] = useState({ x: -2000, y: marginBounds });
 
   const activeTrailId =
     (trail && trail.id) || trailId || (trailDetails && trailDetails.id) || null;
@@ -208,7 +164,6 @@ const TrailModal = ({
       })
       .catch((err) => {
         if (!isMounted) return;
-        console.error("Failed to fetch trail details:", err);
         setError("Unable to load additional details.");
         setLoading(false);
       });
@@ -218,18 +173,12 @@ const TrailModal = ({
     };
   }, [isOpen, activeTrailId]);
 
-  // --- Positioning Logic (Right Side Snap) ---
+  // --- Positioning Logic (Snap to Right) ---
   useLayoutEffect(() => {
     if (isOpen) {
       const winWidth = window.innerWidth;
-      // Snap to right side: Window width - Panel width (360) - Margin (16)
-      const newX = winWidth - 360 - marginBounds;
-      const newY = marginBounds;
-
-      setPosition({
-        x: Math.max(marginBounds, newX),
-        y: newY,
-      });
+      const newX = winWidth - 380 - marginBounds; // 380 is new width
+      setPosition({ x: Math.max(marginBounds, newX), y: marginBounds });
     }
   }, [isOpen]);
 
@@ -251,7 +200,6 @@ const TrailModal = ({
         nextX = Math.min(Math.max(nextX, -panel.offsetWidth + 50), maxX);
         nextY = Math.min(Math.max(nextY, 0), maxY);
       }
-
       setPosition({ x: nextX, y: nextY });
     };
     const handleMouseUp = () => setIsDragging(false);
@@ -282,8 +230,6 @@ const TrailModal = ({
   const level = resolvedTrail?.difficulty || 1;
   const difficultyMeta = DIFFICULTY_META[level] || DIFFICULTY_META[1];
 
-  if (!isOpen || !activeTrailId) return null;
-
   const handleFavoriteClick = () => {
     if (onFavoriteToggle && resolvedTrail) {
       onFavoriteToggle(resolvedTrail, !isFavorite);
@@ -298,318 +244,335 @@ const TrailModal = ({
   };
 
   return (
-    <>
-      <style>
-        {`@keyframes trail-modal-shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-          }
-        `}
-      </style>
-
-      {/* No backdrop div here, just the container for positioning */}
-      <div style={overlayStyle}>
-        <aside
-          ref={panelRef}
-          style={panelStyle}
-          role="dialog"
-          aria-label="Trail details"
-          aria-modal="false"
-        >
-          {/* Header is the Drag Handle */}
-          <div style={headerStyle} onMouseDown={handleDragStart}>
-            {onClose && (
+    <div style={overlayStyle}>
+      <AnimatePresence>
+        {isOpen && activeTrailId && (
+          <motion.aside
+            key="modal"
+            ref={panelRef}
+            role="dialog"
+            aria-modal="false"
+            initial={{ x: 50, opacity: 0, scale: 0.95 }}
+            animate={{ x: 0, opacity: 1, scale: 1 }}
+            exit={{ x: 50, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            style={panelStyle}
+          >
+            {/* Header */}
+            <div style={headerStyle} onMouseDown={handleDragStart}>
               <button
                 type="button"
-                style={closeButtonStyle}
                 onClick={onClose}
-                aria-label="Close trail details"
+                style={{
+                  position: "absolute",
+                  top: "20px",
+                  right: "20px",
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "32px",
+                  height: "32px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#64748b",
+                  transition: "all 0.2s",
+                }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(44, 95, 45, 0.18)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
+                  e.currentTarget.style.background = "#e2e8f0";
+                  e.currentTarget.style.color = "#1e293b";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.06)";
-                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.background = "#f1f5f9";
+                  e.currentTarget.style.color = "#64748b";
                 }}
               >
-                ×
+                <X size={18} />
               </button>
-            )}
-            <div style={{ paddingRight: onClose ? "46px" : "0" }}>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "13px",
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
-                  color: "rgba(60,70,60,0.7)",
-                  fontWeight: 600,
-                  userSelect: "none",
-                }}
-              >
-                Featured Trail
-              </p>
-              <h2
-                style={{
-                  margin: "6px 0 12px",
-                  fontSize: "24px",
-                  lineHeight: 1.3,
-                  color: "#2c5f2d",
-                  fontWeight: 700,
-                  userSelect: "none",
-                }}
-              >
-                {resolvedTrail?.name || "Loading trail..."}
-              </h2>
-            </div>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "10px 14px",
-                borderRadius: "12px",
-                backgroundColor: difficultyMeta.accent,
-                color: difficultyMeta.color,
-                fontWeight: 600,
-                fontSize: "14px",
-                userSelect: "none",
-              }}
-            >
-              <span aria-hidden="true">{difficultyMeta.emoji}</span>
-              <span>
-                Difficulty:{" "}
-                {resolvedTrail?.difficulty_text || difficultyMeta.label}
-              </span>
-            </div>
-          </div>
 
-          <div style={bodyStyle}>
-            {loading ? (
-              <div style={{ display: "grid", gap: "14px" }}>
+              <div style={{ paddingRight: "40px" }}>
                 <div
-                  style={{ ...shimmerStyle, height: "20px", width: "70%" }}
-                />
-                <div
-                  style={{ ...shimmerStyle, height: "20px", width: "85%" }}
-                />
-                <div style={metaGridStyle}>
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={`loading-${i}`}
-                      style={{
-                        ...shimmerStyle,
-                        height: "72px",
-                        borderRadius: "12px",
-                      }}
-                    />
-                  ))}
-                </div>
-                <div
-                  style={{ ...shimmerStyle, height: "140px", width: "100%" }}
-                />
-              </div>
-            ) : error ? (
-              <div
-                style={{
-                  padding: "18px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(220, 53, 69, 0.25)",
-                  backgroundColor: "rgba(220, 53, 69, 0.12)",
-                  color: "#931b24",
-                }}
-              >
-                <p style={{ margin: 0, fontWeight: 600 }}>
-                  Unable to load trail details
-                </p>
-                <p style={{ margin: "6px 0 0", fontSize: "14px" }}>{error}</p>
-              </div>
-            ) : (
-              <>
-                <div style={metaGridStyle}>
-                  {[
-                    {
-                      label: "Location",
-                      icon: "📍",
-                      value: resolvedTrail?.location || "Unknown",
-                    },
-                    {
-                      label: "Length",
-                      icon: "🥾",
-                      value: resolvedTrail?.length_miles
-                        ? `${resolvedTrail.length_miles} miles`
-                        : "N/A",
-                    },
-                    /* -- ADDED EST. TIME HERE -- */
-                    {
-                      label: "Est. Time",
-                      icon: "⏱️",
-                      value: formatDuration(
-                        resolvedTrail?.estimated_time_minutes,
-                      ),
-                    },
-                    /* -- ELEVATION IS NOW BELOW IT -- */
-                    {
-                      label: "Elevation",
-                      icon: "⛰️",
-                      value: resolvedTrail?.elevation_gain_ft
-                        ? `${resolvedTrail.elevation_gain_ft} ft`
-                        : "N/A",
-                    },
-                  ].map((tile) => (
-                    <div key={tile.label} style={metaTileStyle}>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "12px",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: "rgba(48,56,48,0.66)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {tile.icon} {tile.label}
-                      </p>
-                      <p
-                        style={{
-                          margin: "6px 0 0",
-                          fontSize: "15px",
-                          fontWeight: 600,
-                          color: "#2c392c",
-                        }}
-                      >
-                        {tile.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {resolvedTrail?.description && (
-                  <section style={{ marginBottom: "24px" }}>
-                    <h3
-                      style={{
-                        margin: "0 0 12px",
-                        fontSize: "17px",
-                        fontWeight: 700,
-                        color: "#2c5f2d",
-                      }}
-                    >
-                      Trail Overview
-                    </h3>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "14px",
-                        lineHeight: 1.6,
-                        color: "rgba(0,0,0,0.75)",
-                      }}
-                    >
-                      {resolvedTrail.description}
-                    </p>
-                  </section>
-                )}
-
-                {resolvedTrail?.necessity_list &&
-                  resolvedTrail.necessity_list.length > 0 && (
-                    <section style={{ marginBottom: "24px" }}>
-                      <h3
-                        style={{
-                          margin: "0 0 12px",
-                          fontSize: "17px",
-                          fontWeight: 700,
-                          color: "#2c5f2d",
-                        }}
-                      >
-                        What to Bring
-                      </h3>
-                      <ul style={chipListStyle}>
-                        {resolvedTrail.necessity_list.map((item, index) => (
-                          <li key={`${item}-${index}`} style={chipStyle}>
-                            <span
-                              style={{
-                                width: "28px",
-                                height: "28px",
-                                borderRadius: "50%",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "rgba(40,167,69,0.12)",
-                                color: "#1f7b3b",
-                                fontWeight: 700,
-                              }}
-                              aria-hidden="true"
-                            >
-                              ✓
-                            </span>
-                            <span
-                              style={{
-                                color: "#2f3c2f",
-                                fontSize: "14px",
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {item}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-
-                {onFavoriteToggle && resolvedTrail && (
-                  <button
-                    type="button"
-                    onClick={handleFavoriteClick}
-                    disabled={favoriteLoading}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span
                     style={{
-                      marginTop: "8px",
-                      width: "100%",
-                      padding: "12px 16px",
-                      borderRadius: "10px",
-                      border: isFavorite
-                        ? "1px solid rgba(255, 193, 7, 0.45)"
-                        : "none",
-                      backgroundColor: isFavorite
-                        ? "rgba(255, 214, 70, 0.35)"
-                        : "#2c5f2d",
-                      color: isFavorite ? "#6c5400" : "#ffffff",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      cursor: favoriteLoading ? "not-allowed" : "pointer",
-                      transition:
-                        "transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease",
-                    }}
-                    onMouseEnter={(event) => {
-                      if (favoriteLoading) return;
-                      event.currentTarget.style.transform = "translateY(-1px)";
-                      event.currentTarget.style.boxShadow =
-                        "0 10px 22px rgba(44,95,45,0.24)";
-                    }}
-                    onMouseLeave={(event) => {
-                      event.currentTarget.style.transform = "translateY(0)";
-                      event.currentTarget.style.boxShadow = "none";
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      textTransform: "uppercase",
+                      letterSpacing: "1px",
+                      color: difficultyMeta.color,
                     }}
                   >
-                    <span aria-hidden="true">{isFavorite ? "⭐" : "☆"}</span>
-                    {favoriteLoading
-                      ? "Updating..."
-                      : isFavorite
-                        ? "Remove from Favorites"
-                        : "Add to Favorites"}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </aside>
-      </div>
-    </>
+                    {resolvedTrail?.difficulty_text || difficultyMeta.label}
+                  </span>
+                  <div
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      backgroundColor: difficultyMeta.color,
+                    }}
+                  />
+                </div>
+
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: "22px",
+                    fontWeight: "700",
+                    color: "#1a202c",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {resolvedTrail?.name || "Loading..."}
+                </h2>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={bodyStyle}>
+              {loading ? (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "40px",
+                  }}
+                >
+                  <Loader2 size={32} className="spin-anim" color="#2c5f2d" />
+                  <p
+                    style={{
+                      marginTop: "12px",
+                      color: "#64748b",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Fetching trail details...
+                  </p>
+                </div>
+              ) : error ? (
+                <div
+                  style={{
+                    padding: "16px",
+                    background: "#fef2f2",
+                    color: "#991b1b",
+                    borderRadius: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  {error}
+                </div>
+              ) : (
+                <>
+                  {/* Meta Grid */}
+                  <div style={metaGridStyle}>
+                    <div style={metaTileStyle}>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: "#64748b",
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        <Ruler size={14} /> Length
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: "600",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {resolvedTrail?.length_miles
+                          ? `${resolvedTrail.length_miles} mi`
+                          : "--"}
+                      </span>
+                    </div>
+
+                    <div style={metaTileStyle}>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: "#64748b",
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        <Clock size={14} /> Est. Time
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: "600",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {formatDuration(resolvedTrail?.estimated_time_minutes)}
+                      </span>
+                    </div>
+
+                    <div style={{ ...metaTileStyle, gridColumn: "span 2" }}>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: "#64748b",
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        <Mountain size={14} /> Elevation Gain
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: "600",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {resolvedTrail?.elevation_gain_ft
+                          ? `${resolvedTrail.elevation_gain_ft} ft`
+                          : "--"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  {resolvedTrail?.description && (
+                    <div style={{ marginBottom: "24px" }}>
+                      <h3
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: "700",
+                          color: "#334155",
+                          marginBottom: "8px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Overview
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "14px",
+                          lineHeight: "1.6",
+                          color: "#475569",
+                          margin: 0,
+                        }}
+                      >
+                        {resolvedTrail.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Necessity List */}
+                  {resolvedTrail?.necessity_list &&
+                    resolvedTrail.necessity_list.length > 0 && (
+                      <div style={{ marginBottom: "24px" }}>
+                        <h3
+                          style={{
+                            fontSize: "14px",
+                            fontWeight: "700",
+                            color: "#334155",
+                            marginBottom: "12px",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          What to Bring
+                        </h3>
+                        <ul style={chipListStyle}>
+                          {resolvedTrail.necessity_list.map((item, index) => (
+                            <li
+                              key={index}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                padding: "10px",
+                                backgroundColor: "#ffffff",
+                                borderRadius: "8px",
+                                border: "1px solid #f1f5f9",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  background: "#dcfce7",
+                                  borderRadius: "50%",
+                                  padding: "4px",
+                                }}
+                              >
+                                <Check
+                                  size={12}
+                                  color="#15803d"
+                                  strokeWidth={3}
+                                />
+                              </div>
+                              <span
+                                style={{ fontSize: "14px", color: "#334155" }}
+                              >
+                                {item}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                  {/* Favorite Button */}
+                  {onFavoriteToggle && resolvedTrail && (
+                    <button
+                      type="button"
+                      onClick={handleFavoriteClick}
+                      disabled={favoriteLoading}
+                      style={{
+                        width: "100%",
+                        padding: "14px",
+                        borderRadius: "12px",
+                        border: "none",
+                        backgroundColor: isFavorite ? "#fffbeb" : "#1e293b",
+                        color: isFavorite ? "#b45309" : "#ffffff",
+                        fontWeight: "600",
+                        fontSize: "15px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        cursor: favoriteLoading ? "not-allowed" : "pointer",
+                        transition: "all 0.2s",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                      }}
+                    >
+                      <Star size={18} fill={isFavorite ? "#b45309" : "none"} />
+                      {favoriteLoading
+                        ? "Updating..."
+                        : isFavorite
+                          ? "Saved to Favorites"
+                          : "Add to Favorites"}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
