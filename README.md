@@ -2,6 +2,13 @@
 
 A full-stack platform for discovering Massachusetts hiking trails. Users can search by city, visualize routes on an interactive map, inspect trail details, monitor live weather, and view realistic hiking ETAs. The project provides a Docker-first workflow via `start.ps1`, manual development instructions (Flask API + React SPA), and an Electron desktop wrapper.
 
+### 👥 Group Members
+
+- **Danle Ly** - lyd9@wit.edu
+- **Michael Sweeney** - sweeneym11@wit.edu
+- **Toby Dokyi** - dokyit@wit.edu
+- **Daren Yun** - yund@wit.edu
+
 ---
 
 ## Table of Contents
