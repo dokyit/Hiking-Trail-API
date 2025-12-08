@@ -1,0 +1,70 @@
+{
+  "name": "hikingtrail-desktop",
+  "version": "1.0.0",
+  "description": "Electron desktop wrapper for the Hiking Trail Explorer web application.",
+  "main": "electron/main.js",
+  "author": "COMP4960 SE Group 5",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "setup": "npm run setup:frontend",
+    "setup:frontend": "npm --prefix ../frontend install",
+    "build:frontend": "npm --prefix ../frontend run build",
+    "start": "npm run start:electron",
+    "start:electron": "electron .",
+    "dev": "concurrently \"npm --prefix ../frontend start\" \"wait-on http://localhost:3000 && electron .\"",
+    "package": "npm run build:frontend && electron-builder",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "electron-is-dev": "^3.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^32.3.3",
+    "electron-builder": "^25.1.8",
+    "rimraf": "^6.0.1",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.hikingtrail.desktop",
+    "productName": "Hiking Trail Explorer",
+    "files": [
+      "electron/**/*",
+      "package.json",
+      {
+        "from": "../frontend/build",
+        "to": "frontend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.entertainment"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
